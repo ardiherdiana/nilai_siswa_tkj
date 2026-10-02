@@ -1,0 +1,31 @@
+@AGENTS.md
+
+## Proyek ini
+
+**Nilai Siswa TKJ & Supervisi Guru**: guru SMK Budi Mulia Karawang mengisi **nilai siswa** (10 nilai tes teori + 10 nilai praktik per siswa, per kelas, per tahun ajaran) dan **lembar supervisi guru** (15 butir + 3 refleksi), lalu mengekspornya ke Excel, Word, dan PDF dengan format template sekolah. Web Laravel + Inertia + React dengan basis data dan akun sendiri.
+
+Semua teks antarmuka, rute, nama kolom nilai, dan pesan galat berbahasa Indonesia. Rute web sengaja tidak diterjemahkan ke Inggris.
+
+## Arsitektur
+
+- **Data**: basis data MySQL `nilai_siswa_tkj` sendiri. Tabel `users`, `kelas`, `siswa`, `nilai`, `supervisi` (satu migrasi: `2026_09_26_000000_create_nilai_tables`). Primary key ULID `string(191)` (trait `App\Models\Concerns\HasUlid`), kolom camelCase (`userId`, `tahunAjaran`), `createdAt`/`updatedAt`. `users`: `username`, `name`, `password`, `role` (`ADMIN` atau `GURU`), `aktif`. Sesi dan cache memakai berkas, antrean `sync`: tidak ada tabel framework.
+- **Kepemilikan**: kelas dan supervisi terikat ke `users.id` lewat `userId` (`ON DELETE CASCADE`: menghapus akun menghapus seluruh nilai dan supervisinya; menonaktifkan tidak). Setiap akun hanya melihat datanya sendiri; data akun lain dijawab **404**, bukan 403 (trait `Controllers\Concerns\MencariMilikSendiri`). ADMIN tidak melihat data guru lain; peran ADMIN hanya menambah halaman Akun.
+- **Rute** (`routes/web.php`): `/login`, `/dashboard`, `/nilai` (daftar kelas), `/kelas/{kelas}` (daftar siswa), `/kelas/{kelas}/siswa/{siswa}` (isi nilai), `/supervisi`, `/supervisi/baru`, `/supervisi/{id}`, `/profil`, `/akun` (ADMIN). Impor Excel (`POST /nilai/impor`) dan unduhan (`/nilai/ekspor`, `/nilai/format-kosong`, `/supervisi/{id}/ekspor`) dipanggil lewat XHR/axios (`resources/js/lib/api.ts`); halaman lain lewat Inertia. Simpan nilai per siswa: satu `PUT /siswa/{id}/nilai` berisi hanya sel yang berubah, atomik.
+- **Login**: username + kata sandi, `Auth::login(remember: true)`, 5 gagal per username+IP mengunci semenit. Akun nonaktif ditolak saat login dan dikeluarkan pada permintaan berikutnya (middleware `aktif`). Tidak ada pendaftaran: akun dibuat admin di halaman Akun; admin pertama di produksi lewat `php artisan nilai:buat-admin <username>` (`--reset` untuk pemulihan: sandi baru, jadi admin aktif; sandi ditanyakan tanpa tampil, `User::ATURAN_USERNAME` dipakai bersama halaman Akun). Kata sandi baru minimal 8 karakter. Admin aktif terakhir tidak bisa diturunkan atau dinonaktifkan; admin tidak bisa menghapus dirinya sendiri.
+- **Ekspor memakai template asli**, bukan dibuat ulang: `resources/aplikasi/format-nilai-siswa.xlsx` (PhpSpreadsheet, `NilaiXlsxExporter`) dan `format-supervisi-guru.docx` (sunting `word/document.xml` langsung, `SupervisiDocxExporter`). PDF tidak lewat LibreOffice (hosting produksi tidak menyediakannya): lembar nilai digambar langsung di canvas dompdf (`NilaiPdfRenderer`, memori ~14 MB untuk 273 baris; lewat HTML ~150 MB), lembar supervisi lewat Blade `pdf/supervisi` + dompdf. Bila template diubah, perbarui juga renderer/view itu. Penyimpangan disengaja dari template: judul kelompok "Nilai Praktik 1" menjadi "Nilai Praktik", kolom Q-X dilebarkan sama dengan O-P, satu tab footer docx dibuang, metadata pembuat file diganti "Nilai Siswa TKJ & Supervisi Guru". Nama siswa selalu ditulis sebagai string (bukan rumus). `format-nilai-siswa.xlsx` memuat contoh 273 nama siswa (dipakai tes impor); baris data dibuang saat ekspor.
+- **Impor** (`SiswaImportService`) membaca berkas berformat template (NO, NAMA SISWA, KELAS, opsional nilai D-M dan O-X); hasil ekspor bisa diimpor kembali. Validasi berkas gagal = 422; berkas tidak berformat = 400 dengan pesan Indonesia.
+- **Error convention**: controller memanggil `abort($status, $pesan)`; `bootstrap/app.php` mengubah 4xx pada permintaan Inertia non-GET menjadi `back()->withErrors(['message' => ...])`, dibaca halaman dari `errors.message`. Toast: controller menulis `->with('toast', ['type' => ..., 'message' => ...])`, `main.tsx` menampilkannya untuk semua kunjungan (jangan menambah `toast.success` lagi di `onSuccess`, nanti dobel).
+- **Keamanan**: middleware `SecurityHeaders` (CSP bernonce, tanpa sumber pihak ketiga; foto halaman masuk disimpan lokal di `public/images/login`), `PreventBackHistoryCache` (`no-store`), `INERTIA_ENCRYPT_HISTORY=true` wajib di semua environment, sesi terenkripsi, `X-Robots-Tag: noindex` dan `robots.txt` melarang semua (aplikasi privat).
+
+## Frontend
+
+- Halaman Inertia = `resources/js/pages/<nama>.tsx` (string di `Inertia::render` harus sama, tanpa ekstensi); satu berkas mengekspor satu komponen, **ekspor pertama adalah komponennya**. Halaman dimuat lazy; `login-page` tanpa sidebar (`BARE_PAGES` di `main.tsx`), sisanya dibungkus `DashboardLayout`.
+- Tampilan mengikuti design system absensi (lihat AGENTS.md). Komponen buatan sendiri: `components/kelas-dialog`, `nama-siswa-dialog` (isi dirender hanya saat terbuka sehingga isian selalu mulai bersih), `export-menu`, `date-picker`, `app-sidebar` (menu Dashboard, Nilai Siswa, Supervisi Guru, Profil Saya, dan Akun untuk ADMIN); `hooks/use-unsaved-guard` meminta konfirmasi bila isian belum disimpan.
+- Konfirmasi hapus memakai `window.confirm`. Setelah `useForm` sukses, isian terakhir menjadi nilai awal: untuk dialog yang dipakai ulang, set isian awal eksplisit (`setData(EMPTY)`), jangan `reset()`.
+- Tes: `composer test` (PHPUnit, MySQL sungguhan `nilai_siswa_tkj_testing`, `withoutVite()` di `tests/TestCase.php`). Tes Inertia memakai `assertInertia` dan helper `inertiaProps()` untuk daftar (tanpa wildcard). Tidak ada tes frontend; `npx tsc -b` dan `npm run lint` adalah pemeriksaan statisnya.
+
+## Jebakan
+
+- Memeriksa di browser dengan puppeteer-core: klik mouse sungguhan berhenti sampai ke halaman setelah `page.goto` kedua di tab yang sama (Chrome headless baru). Buka tab baru untuk tiap navigasi dokumen. Peramban headless mengikuti tema sistem (gelap).
+- `preg_replace` membaca `$2y$` di string pengganti sebagai referensi balik; untuk hash bcrypt pakai `substr`.
+- Waktu lokal `Asia/Jakarta`; koneksi MySQL memakai `DB_TIMEZONE=+07:00`. Tahun ajaran dimulai Juli (`Kelas::tahunAjaranSekarang()`).

@@ -1,0 +1,85 @@
+# =============================================================================
+# .gitignore - Nilai Siswa TKJ & Supervisi Guru SMK Budi Mulia
+# Prinsip: apa pun yang berisi rahasia, data pribadi siswa/guru, atau hasil
+# build/cache TIDAK boleh masuk git. Kalau ragu, ignore dulu.
+# .gitignore bawaan Laravel di storage/, bootstrap/cache/, dan database/ dipertahankan apa adanya.
+# =============================================================================
+
+# --- Kredensial & catatan pribadi --------------------------------------------
+.env
+.env.*
+!.env.example
+LOGIN.md
+*LOGIN*.md
+*credential*
+*kredensial*
+*secret*
+*.pem
+*.key
+*.p12
+*.pfx
+*.crt
+id_rsa*
+/auth.json
+/storage/*.key
+
+# --- Data produksi & data pribadi --------------------------------------------
+# Dump database (nama siswa, hash sandi), ekspor nilai, dan arsip unggahan.
+*.sql
+*.sql.gz
+*.dump
+*.sqlite
+*.sqlite-journal
+*.sqlite3
+*.zip
+*.tar
+*.tar.gz
+*.7z
+*.rar
+*.bak
+*.backup
+*.old
+/*.xlsx
+/*.docx
+
+# --- Hasil build & dependensi -------------------------------------------------
+/vendor
+/node_modules
+/public/build
+/public/hot
+/public/storage
+*.tsbuildinfo
+/dist
+/coverage
+npm-install.log
+
+# --- Log, cache, dan berkas runtime -------------------------------------------
+*.log
+/storage/pail
+/storage/debugbar
+.phpunit.result.cache
+/.phpunit.cache
+.eslintcache
+.php-cs-fixer.cache
+.phpactor.json
+
+# --- Editor / OS / AI tooling lokal -------------------------------------------
+/.idea
+/.vscode
+/.fleet
+/.nova
+/.zed
+/.cursor/
+/.codex
+/.claude/settings.local.json
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+Desktop.ini
+_ide_helper.php
+_ide_helper_models.php
+.phpstorm.meta.php
+Homestead.json
+Homestead.yaml
